@@ -4,7 +4,7 @@ import os
 from PyQt5.QtWidgets import QWidget, QApplication, QHBoxLayout, QVBoxLayout
 from PyQt5.QtWidgets import QLabel, QPushButton, QFileDialog
 from PyQt5.QtWidgets import QMessageBox, QGroupBox, QSpinBox, QProgressBar
-from PyQt5.QtWidgets import QMenu, QCheckBox
+from PyQt5.QtWidgets import QMenu, QCheckBox, QComboBox
 from PyQt5.QtGui import QPixmap, QIcon, QFont
 from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtCore import QAbstractNativeEventFilter
@@ -16,6 +16,8 @@ import hashlib
 import time
 import configparser
 import ctypes.wintypes
+from keymapsetting import KeyMapSetting
+import mido
 
 programBasePath = None
 
@@ -33,7 +35,7 @@ class MainWindow(QWidget):
     def __init__(self):
         super(MainWindow, self).__init__()
         
-        self.version = '1.0'
+        self.version = '1.1.2'
         self.baseTitle = '『克拉维亚·吹小曲儿』'
         self.lastOpenDirPath = '.'
         self.setWindowTitle(self.baseTitle)
@@ -56,7 +58,10 @@ class MainWindow(QWidget):
         hbox = QHBoxLayout()
         pb = QPushButton('刷新游戏窗口')
         pb.clicked.connect(self.refreshGameProcess)
-        hbox.addWidget(pb)   
+        hbox.addWidget(pb)  
+        pb = QPushButton('设置键位')
+        pb.clicked.connect(self.modifyKeyMap)
+        hbox.addWidget(pb)
         vbox.addLayout(hbox)
         
         hbox1 = QHBoxLayout()
@@ -98,6 +103,15 @@ class MainWindow(QWidget):
         
         gb = QGroupBox('单人/双开 演奏')
         vbox1 = QVBoxLayout()
+        self.cbMidiDevice = QComboBox()
+        try:
+            midiDevices = mido.get_input_names()
+        except:
+            midiDevices = []
+        for d in midiDevices:
+            self.cbMidiDevice.addItem(d)
+        self.cbMidiDevice.setCurrentIndex(0)
+        vbox1.addWidget(self.cbMidiDevice)
         pb = QPushButton('用Midi键盘弹琴')
         pb.clicked.connect(self.useMidiKeybord)
         vbox1.addWidget(pb)
@@ -302,7 +316,14 @@ class MainWindow(QWidget):
                 self.lblGame1.setText('没有')
         else:
             self.lblGame0.setText('没有')
-            self.lblGame1.setText('没有')        
+            self.lblGame1.setText('没有')    
+            
+    def modifyKeyMap(self):
+        kms = KeyMapSetting(ff14midi.keyMap)
+        kms.exec_()
+        ff14midi.keyCode = kms.keyCode
+        ff14midi.keyMap = kms.keyMap
+        ff14midi.saveKeyMap('keyMap.txt')
         
     def gameTest(self, hid):
         try:
@@ -329,12 +350,14 @@ class MainWindow(QWidget):
         if((ff14midi.isPlaying) or (ff14midi.isPerforming)):
             QMessageBox.warning(self, '正在演奏', '已经在演奏了。')
             return
+        ff14midi.midiDeviceName = self.cbMidiDevice.currentText()
         _thread.start_new_thread(ff14midi.playMidiInput, ())
         
     def useMidiKeybordToTwoGames(self):
         if((ff14midi.isPlaying) or (ff14midi.isPerforming)):
             QMessageBox.warning(self, '正在演奏', '已经在演奏了。')
             return
+        ff14midi.midiDeviceName = self.cbMidiDevice.currentText()
         _thread.start_new_thread(ff14midi.playMidiInputToTwoGames, ())
         
     def useMidiKeyboardFor0(self, state):
@@ -350,6 +373,7 @@ class MainWindow(QWidget):
         if(ff14midi.mid is None):
             QMessageBox.warning(self, '没内容', '还没选Midi文件。')
             return
+        ff14midi.midiDeviceName = self.cbMidiDevice.currentText()
         _thread.start_new_thread(ff14midi.play, (mode,))
     
     def updateStatus(self):

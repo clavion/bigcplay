@@ -8,11 +8,12 @@ import ctypes
 import _thread
 
 ff14WindowHandle = []
-keyCode = {}
+keyCode = []
+keyMap = []
 sequence = []
-minNoteLength = 0.01
-sameSpacing = 0.051
-differentSpacing = 0.051
+minNoteLength = 0.05
+sameSpacing = 0.04
+differentSpacing = 0.04
 mid = None
 isPlaying = False
 isPerforming = False
@@ -25,6 +26,7 @@ seqLength = 1
 scheduledBeginTime = 0
 sendMidiInput = [False, False]
 timeToNextNote = 1000000
+midiDeviceName = ''
 
 def log(text):
     print('[' + time.strftime('%H:%M:%S', time.localtime(time.time())) + '] ' + text)
@@ -67,17 +69,36 @@ def keyPress(hid, keyCode, timeLength=0.1):
     keyUp(hid, keyCode)
 
 def loadKeyMap(filePath):
-    global keyCode
+    global keyCode, keyMap
     try:
         f = open(filePath)
         content = f.read()
         keyCode = []
+        keyMap = []
         for c in content:
+            keyMap.append(ord(c))
             keyCode.append(ctypes.windll.User32.VkKeyScanA(ord(c)) & 0xffff)
         f.close()
-        log('Loaded key map: ' + str(keyCode))
+        log('Loaded key map: ' + str(keyMap) + '。')
     except:
-        log('Cannot load key map from file.')
+        log('Cannot load key map, using default.')
+        defaultKeys = 'zxcvbnm,./[]q2w3er5t6y7uasdfghjkl;\'-='
+        for c in defaultKeys:
+            keyMap.append(ord(c))
+            keyCode.append(ctypes.windll.User32.VkKeyScanA(ord(c)) & 0xffff)
+        return True
+    return True
+
+def saveKeyMap(filePath):
+    global keyMap
+    try:
+        f = open(filePath, 'w')
+        for c in keyMap:
+            f.write(chr(c))
+        f.close()
+        log('Key map is saved.')
+    except:
+        log('Cannot save key map to file.')
         return False
     return True
 
@@ -196,15 +217,15 @@ def metronomeEcho():
 
 def playMidiInput():
     global isPerforming, terminating, ff14WindowHandle, keyCode, sendMidiInput
-    global differentSpacing, minNoteLength, progress, seqLength
+    global differentSpacing, minNoteLength, progress, seqLength, midiDeviceName
     if(len(ff14WindowHandle) == 0):
         return
     terminating = False
     isPerforming = True
     log('Started playing from midi device input.')
     try:
-        mi = mido.open_input()
-        pressingKey = 0
+        mi = mido.open_input(midiDeviceName)
+        # pressingKey = 0
         while(True):
             if(terminating):
                 break
@@ -213,13 +234,13 @@ def playMidiInput():
                     if((msg.note < 48) or (msg.note > 84)):
                         continue
                     key = keyCode[msg.note - 48]
-                    if(pressingKey > 0):
-                        if(sendMidiInput[0]):
-                            keyUp(0, pressingKey)
-                        if(sendMidiInput[1]):
-                            keyUp(1, pressingKey)
-                        time.sleep(differentSpacing)
-                    pressingKey = key
+                    # if(pressingKey > 0):
+                    #     if(sendMidiInput[0]):
+                    #         keyUp(0, pressingKey)
+                    #     if(sendMidiInput[1]):
+                    #         keyUp(1, pressingKey)
+                    #     time.sleep(differentSpacing)
+                    # pressingKey = key
                     if(sendMidiInput[0]):
                         keyDown(0, key)
                     if(sendMidiInput[1]):
@@ -229,13 +250,13 @@ def playMidiInput():
                     if((msg.note < 48) or (msg.note > 84)):
                         continue
                     key = keyCode[msg.note - 48]
-                    if(pressingKey == key):
-                        if(sendMidiInput[0]):
-                            keyUp(0, key)
-                        if(sendMidiInput[1]):
-                            keyUp(1, key)
-                        pressingKey = 0
-                        time.sleep(differentSpacing)
+                    # if(pressingKey == key):
+                    if(sendMidiInput[0]):
+                        keyUp(0, key)
+                    if(sendMidiInput[1]):
+                        keyUp(1, key)
+                    pressingKey = 0
+                    # time.sleep(differentSpacing)
             time.sleep(0.001)
         mi.close()
     except Exception as e:
@@ -249,15 +270,15 @@ def playMidiInput():
 
 def playMidiInputToTwoGames():
     global isPerforming, terminating, ff14WindowHandle, keyCode, sendMidiInput
-    global differentSpacing, minNoteLength, progress, seqLength
+    global differentSpacing, minNoteLength, progress, seqLength, midiDeviceName
     if(len(ff14WindowHandle) == 0):
         return
     terminating = False
     isPerforming = True
     log('Started splitting midi device input to two game windows.')
     try:
-        mi = mido.open_input()
-        pressingKey = [0, 0]
+        mi = mido.open_input(midiDeviceName)
+        # pressingKey = [0, 0]
         while(True):
             if(terminating):
                 break
@@ -271,10 +292,10 @@ def playMidiInputToTwoGames():
                     else:
                         key = keyCode[msg.note - 60]
                         hid = 1                        
-                    if(pressingKey[hid] > 0):
-                        keyUp(hid, pressingKey[hid])
-                        time.sleep(differentSpacing)
-                    pressingKey[hid] = key
+                    # if(pressingKey[hid] > 0):
+                    #     keyUp(hid, pressingKey[hid])
+                    #     time.sleep(differentSpacing)
+                    # pressingKey[hid] = key
                     keyDown(hid, key)
                     time.sleep(minNoteLength)
                 elif((msg.velocity == 0) or (msg.type == 'note_off')):
@@ -286,10 +307,10 @@ def playMidiInputToTwoGames():
                     else:
                         key = keyCode[msg.note - 60]
                         hid = 1                        
-                    if(pressingKey[hid] == key):
-                        keyUp(hid, key)
-                        pressingKey[hid] = 0
-                        time.sleep(differentSpacing)
+                    # if(pressingKey[hid] == key):
+                    keyUp(hid, key)
+                    # pressingKey[hid] = 0
+                    time.sleep(differentSpacing)
             time.sleep(0.001)
         mi.close()
     except Exception as e:
