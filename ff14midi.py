@@ -11,9 +11,6 @@ ff14WindowHandle = []
 keyCode = []
 keyMap = []
 sequence = []
-minNoteLength = 0.05
-sameSpacing = 0.04
-differentSpacing = 0.04
 mid = None
 isPlaying = False
 isPerforming = False
@@ -225,39 +222,41 @@ def playMidiInput():
     log('Started playing from midi device input.')
     try:
         mi = mido.open_input(midiDeviceName)
-        # pressingKey = 0
+        pressingKey = 0
         while(True):
             if(terminating):
                 break
-            for msg in mi.iter_pending():
-                if((msg.type == 'note_on') and (msg.velocity > 0)):
-                    if((msg.note < 48) or (msg.note > 84)):
-                        continue
-                    key = keyCode[msg.note - 48]
-                    # if(pressingKey > 0):
-                    #     if(sendMidiInput[0]):
-                    #         keyUp(0, pressingKey)
-                    #     if(sendMidiInput[1]):
-                    #         keyUp(1, pressingKey)
-                    #     time.sleep(differentSpacing)
-                    # pressingKey = key
+            msg = mi.poll()
+            if(msg is None):
+                time.sleep(0.001)
+                continue
+            if((msg.type == 'note_on') and (msg.velocity > 0)):
+                if((msg.note < 48) or (msg.note > 84)):
+                    continue
+                key = keyCode[msg.note - 48]
+                if(pressingKey > 0):
                     if(sendMidiInput[0]):
-                        keyDown(0, key)
+                        keyUp(0, pressingKey)
                     if(sendMidiInput[1]):
-                        keyDown(1, key)
-                    time.sleep(minNoteLength)
-                elif((msg.type == 'note_off') or ((msg.type == 'note_off') and (msg.velocity == 0))):
-                    if((msg.note < 48) or (msg.note > 84)):
-                        continue
-                    key = keyCode[msg.note - 48]
-                    # if(pressingKey == key):
+                        keyUp(1, pressingKey)
+                    pressingKey = 0
+                if(sendMidiInput[0]):
+                    keyDown(0, key)
+                if(sendMidiInput[1]):
+                    keyDown(1, key)
+                pressingKey = key
+                time.sleep(0.05)
+            elif((msg.type == 'note_off') or ((msg.type == 'note_on') and (msg.velocity == 0))):
+                if((msg.note < 48) or (msg.note > 84)):
+                    continue
+                key = keyCode[msg.note - 48]
+                if(key == pressingKey):
                     if(sendMidiInput[0]):
                         keyUp(0, key)
                     if(sendMidiInput[1]):
                         keyUp(1, key)
                     pressingKey = 0
-                    # time.sleep(differentSpacing)
-            time.sleep(0.001)
+                time.sleep(0.001)
         mi.close()
     except Exception as e:
         print(e)
@@ -267,6 +266,24 @@ def playMidiInput():
             pass
     log('Playing midi device input completed.')
     isPerforming = False
+
+def appendEvent(seq, eventTime, keyCode, isDown):
+    if(isDown):
+        if(seq[-1][2]):
+            appendEvent(seq, eventTime, seq[-1][1], False)
+        if(eventTime - seq[-1][0] < 0.001):
+            eventTime = seq[-1][0] + 0.001
+        seq.append([eventTime, keyCode, True])
+    else:
+        if(seq[-1][2]):
+            if(eventTime - seq[-1][0] < 0.05):
+                eventTime = seq[-1][0] + 0.05
+            seq.append([eventTime, keyCode, False])
+        else:
+            if(eventTime - seq[-1][0] < 0.001):
+                eventTime = seq[-1][0] + 0.001
+            seq.append([eventTime, keyCode, False])
+
 
 def playMidiInputToTwoGames():
     global isPerforming, terminating, ff14WindowHandle, keyCode, sendMidiInput
@@ -278,39 +295,46 @@ def playMidiInputToTwoGames():
     log('Started splitting midi device input to two game windows.')
     try:
         mi = mido.open_input(midiDeviceName)
-        # pressingKey = [0, 0]
+        seq0 = [[0, 0, False]]
+        seq1 = [[0, 0, False]]
         while(True):
             if(terminating):
                 break
-            for msg in mi.iter_pending():
+            msg = mi.poll()
+            nowTime = time.time()
+            if(msg):
                 if((msg.velocity > 0) and (msg.type == 'note_on')):           
                     if((msg.note < 24) or (msg.note > 96)):
                         continue
                     if(msg.note < 60):
                         key = keyCode[msg.note - 24]
-                        hid = 0
+                        appendEvent(seq0, nowTime, key, True)
                     else:
                         key = keyCode[msg.note - 60]
-                        hid = 1                        
-                    # if(pressingKey[hid] > 0):
-                    #     keyUp(hid, pressingKey[hid])
-                    #     time.sleep(differentSpacing)
-                    # pressingKey[hid] = key
-                    keyDown(hid, key)
-                    time.sleep(minNoteLength)
+                        appendEvent(seq1, nowTime, key, True)
                 elif((msg.velocity == 0) or (msg.type == 'note_off')):
                     if((msg.note < 24) or (msg.note > 96)):
                         continue
                     if(msg.note < 60):
                         key = keyCode[msg.note - 24]
-                        hid = 0
+                        appendEvent(seq0, nowTime, key, False)
                     else:
                         key = keyCode[msg.note - 60]
-                        hid = 1                        
-                    # if(pressingKey[hid] == key):
-                    keyUp(hid, key)
-                    # pressingKey[hid] = 0
-                    time.sleep(differentSpacing)
+                        appendEvent(seq1, nowTime, key, False)
+            if(len(seq0) > 1):
+                if(seq0[1][0] <= nowTime):
+                    if(seq0[1][2]):
+                        keyDown(0, seq0[1][1])
+                    else:
+                        keyUp(0, seq0[1][1])
+                    del seq0[0]
+            if(len(seq1) > 1):
+                if(seq1[1][0] <= nowTime):
+                    if(seq1[1][2]):
+                        keyDown(1, seq1[1][1])
+                    else:
+                        keyUp(1, seq1[1][1])
+                    del seq1[0]
             time.sleep(0.001)
         mi.close()
     except Exception as e:

@@ -35,7 +35,7 @@ class MainWindow(QWidget):
     def __init__(self):
         super(MainWindow, self).__init__()
         
-        self.version = '1.1.2'
+        self.version = '1.2'
         self.baseTitle = '『克拉维亚·吹小曲儿』'
         self.lastOpenDirPath = '.'
         self.setWindowTitle(self.baseTitle)
