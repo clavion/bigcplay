@@ -17,6 +17,7 @@ import time
 import configparser
 import ctypes.wintypes
 from keymapsetting import KeyMapSetting
+from midimappingsetting import MidiMappingSetting
 import mido
 
 programBasePath = None
@@ -35,7 +36,7 @@ class MainWindow(QWidget):
     def __init__(self):
         super(MainWindow, self).__init__()
         
-        self.version = '1.2'
+        self.version = '1.3'
         self.baseTitle = '『克拉维亚·吹小曲儿』'
         self.lastOpenDirPath = '.'
         self.setWindowTitle(self.baseTitle)
@@ -79,6 +80,7 @@ class MainWindow(QWidget):
         hbox2.addWidget(pb)
         vbox1.addLayout(hbox2)
         cb = QCheckBox('使用Midi键盘')
+        cb.setChecked(True)
         cb.stateChanged.connect(self.useMidiKeyboardFor0)
         vbox1.addWidget(cb)
         gb.setLayout(vbox1)
@@ -112,12 +114,25 @@ class MainWindow(QWidget):
             self.cbMidiDevice.addItem(d)
         self.cbMidiDevice.setCurrentIndex(0)
         vbox1.addWidget(self.cbMidiDevice)
+        
+        hbox1 = QHBoxLayout()
         pb = QPushButton('用Midi键盘弹琴')
         pb.clicked.connect(self.useMidiKeybord)
-        vbox1.addWidget(pb)
+        hbox1.addWidget(pb)
+        pb = QPushButton('设置')
+        pb.clicked.connect(self.setMapping)
+        hbox1.addWidget(pb)
+        vbox1.addLayout(hbox1)
+        
+        hbox1 = QHBoxLayout()
         pb = QPushButton('双开而且Midi键盘很长')
         pb.clicked.connect(self.useMidiKeybordToTwoGames)
-        vbox1.addWidget(pb)
+        hbox1.addWidget(pb)
+        pb = QPushButton('设置')
+        pb.clicked.connect(self.setMappingLong)
+        hbox1.addWidget(pb)
+        vbox1.addLayout(hbox1)
+        
         pb = QPushButton('直接开始Midi文件')
         pb.setIcon(QIcon(getResourcePath('iconPlay.png')))
         pb.clicked.connect(self.begin)
@@ -263,6 +278,15 @@ class MainWindow(QWidget):
             pass
         self.ntpServers = ['ntp3.aliyun.com', 'time.windows.com']
     
+        try:
+            ff14midi.normalLowestNote = int(self.config['params']['normalLowestNote'])
+        except:
+            pass
+        try:
+            ff14midi.longLowestNote = int(self.config['params']['longLowestNote'])
+        except:
+            pass
+    
         self.show()
         
         if(not ff14midi.loadKeyMap('keyMap.txt')):
@@ -359,6 +383,26 @@ class MainWindow(QWidget):
             return
         ff14midi.midiDeviceName = self.cbMidiDevice.currentText()
         _thread.start_new_thread(ff14midi.playMidiInputToTwoGames, ())
+        
+    def setMapping(self, isLong=False):
+        self.stop()
+        for i in range(10):
+            if(not ff14midi.isPerforming):
+                break
+            time.sleep(0.1)
+        if(ff14midi.isPerforming):
+            return
+        mms = MidiMappingSetting(self.cbMidiDevice.currentText(), isLong)
+        mms.begin()
+        if(mms.selectedKey == 0):
+            return
+        if(isLong):
+            ff14midi.longLowestNote = mms.selectedKey - 36
+        else:
+            ff14midi.normalLowestNote = mms.selectedKey
+            
+    def setMappingLong(self):
+        self.setMapping(True)
         
     def useMidiKeyboardFor0(self, state):
         ff14midi.sendMidiInput[0] = state == Qt.Checked
@@ -460,6 +504,8 @@ class MainWindow(QWidget):
         self.config['params']['lastOpenDir'] = self.lastOpenDirPath
         self.config['params']['metronomeX'] = str(self.sbMetronomeX.value())
         self.config['params']['metronomeY'] = str(self.sbMetronomeY.value())
+        self.config['params']['normalLowestNote'] = str(ff14midi.normalLowestNote)
+        self.config['params']['longLowestNote'] = str(ff14midi.longLowestNote)
         f = open('config.ini', 'w')
         self.config.write(f)
         f.close()

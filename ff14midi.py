@@ -21,9 +21,11 @@ delay = 0
 progress = 0
 seqLength = 1
 scheduledBeginTime = 0
-sendMidiInput = [False, False]
+sendMidiInput = [True, False]
 timeToNextNote = 1000000
 midiDeviceName = ''
+normalLowestNote = 48
+longLowestNote = 24
 
 def log(text):
     print('[' + time.strftime('%H:%M:%S', time.localtime(time.time())) + '] ' + text)
@@ -231,9 +233,9 @@ def playMidiInput():
                 time.sleep(0.001)
                 continue
             if((msg.type == 'note_on') and (msg.velocity > 0)):
-                if((msg.note < 48) or (msg.note > 84)):
+                if((msg.note < normalLowestNote) or (msg.note > normalLowestNote + 36)):
                     continue
-                key = keyCode[msg.note - 48]
+                key = keyCode[msg.note - normalLowestNote]
                 if(pressingKey > 0):
                     if(sendMidiInput[0]):
                         keyUp(0, pressingKey)
@@ -247,9 +249,9 @@ def playMidiInput():
                 pressingKey = key
                 time.sleep(0.05)
             elif((msg.type == 'note_off') or ((msg.type == 'note_on') and (msg.velocity == 0))):
-                if((msg.note < 48) or (msg.note > 84)):
+                if((msg.note < normalLowestNote) or (msg.note > normalLowestNote + 36)):
                     continue
-                key = keyCode[msg.note - 48]
+                key = keyCode[msg.note - normalLowestNote]
                 if(key == pressingKey):
                     if(sendMidiInput[0]):
                         keyUp(0, key)
@@ -303,23 +305,23 @@ def playMidiInputToTwoGames():
             msg = mi.poll()
             nowTime = time.time()
             if(msg):
-                if((msg.velocity > 0) and (msg.type == 'note_on')):           
-                    if((msg.note < 24) or (msg.note > 96)):
+                if((msg.type == 'note_on') and (msg.velocity > 0)):          
+                    if((msg.note < longLowestNote) or (msg.note > longLowestNote + 72)):
                         continue
-                    if(msg.note < 60):
-                        key = keyCode[msg.note - 24]
+                    if(msg.note < longLowestNote + 36):
+                        key = keyCode[msg.note - longLowestNote]
                         appendEvent(seq0, nowTime, key, True)
                     else:
-                        key = keyCode[msg.note - 60]
+                        key = keyCode[msg.note - longLowestNote - 36]
                         appendEvent(seq1, nowTime, key, True)
-                elif((msg.velocity == 0) or (msg.type == 'note_off')):
-                    if((msg.note < 24) or (msg.note > 96)):
+                elif((msg.type == 'note_off') or ((msg.type == 'note_on') and (msg.velocity == 0))):
+                    if((msg.note < longLowestNote) or (msg.note > longLowestNote + 72)):
                         continue
-                    if(msg.note < 60):
-                        key = keyCode[msg.note - 24]
+                    if(msg.note < longLowestNote + 36):
+                        key = keyCode[msg.note - longLowestNote]
                         appendEvent(seq0, nowTime, key, False)
                     else:
-                        key = keyCode[msg.note - 60]
+                        key = keyCode[msg.note - longLowestNote - 36]
                         appendEvent(seq1, nowTime, key, False)
             if(len(seq0) > 1):
                 if(seq0[1][0] <= nowTime):
